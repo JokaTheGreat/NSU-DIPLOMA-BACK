@@ -5,7 +5,7 @@ WORKDIR /usr/src/app/
 
 COPY . /usr/src/app/
 
-EXPOSE 8080
+EXPOSE 3333
 
 RUN pip install flask
 RUN pip install -U flask-cors

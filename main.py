@@ -6,7 +6,7 @@ from flask import Flask, request
 from flask_cors import cross_origin
 
 host = '0.0.0.0'
-port = 8080
+port = 3333
 
 app = Flask(__name__)
 
