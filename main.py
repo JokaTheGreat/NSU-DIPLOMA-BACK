@@ -6,7 +6,7 @@ from flask import Flask, request
 from flask_cors import cross_origin
 
 host = '0.0.0.0'
-port = 3333
+port = 8080
 
 app = Flask(__name__)
 
@@ -46,7 +46,7 @@ def update_pick_times():
     return request.json
 
 
-@app.route('/')
+@app.route('/hello')
 def hello_world():
     return 'Hello, World!'
 
