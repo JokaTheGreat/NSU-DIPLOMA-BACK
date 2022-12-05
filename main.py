@@ -10,8 +10,8 @@ host = '0.0.0.0'
 port = 3333
 
 sshHost = 'ftp_storage'
-sshUser = 'user'
-sshPassw = 'user'
+sshUser = 'root'
+sshPassw = 'root'
 
 app = Flask(__name__)
 
@@ -25,25 +25,16 @@ def update_pick_times():
     sshClient = paramiko.SSHClient()
     sshClient.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     sshClient.connect(hostname=sshHost, username=sshUser, password=sshPassw)
-    stdin, stdout, stderr = sshClient.exec_command('su root')
-    stdin.write("root" + "\n")
-    stdin.flush()
-    stdin, stdout, stderr = sshClient.exec_command(f"scxmldump -fpP -E {eventId} -o TEST.xml \
+
+    stdin, stdout, stderr = sshClient.exec_command(f"scxmldump -fpP -E {eventId} -o ./test/TEST.xml \
          -d postgresql://sysop:sysop@localhost/seiscomp")
-
-    return request.json
-
-
-    getXmlFromDBCommand = f"scxmldump -fpP -E {eventId} -o {eventId}.xml \
-         -d postgresql://sysop:sysop@localhost/seiscomp"
-    # TODO: eventId.xml Заменить на evenId после последнего слэша.xml
-
-    process = subprocess.Popen(getXmlFromDBCommand, stdout=subprocess.PIPE)
-    process.wait()
+    app.logger.info(str(stdout.read() + stderr.read(), 'utf-8'))
 
     prefix = "http://geofon.gfz-potsdam.de/ns/seiscomp3-schema/0.11"
-    filename = f"{eventId}.xml"
-    tree = ET.parse(filename)
+    filename = "./test/TEST.xml"
+    sftpClient = sshClient.open_sftp()
+    remoteFile = sftpClient.open(filename, mode="r")
+    tree = ET.parse(remoteFile)
     ET.register_namespace('', prefix)
     root = tree.getroot()
 
@@ -55,12 +46,17 @@ def update_pick_times():
             if (re.match(regExp, xmlPick.get("publicID"))):
                 xmlPick.find(f"{{{prefix}}}time").find(f"{{{prefix}}}value").text = str(pick["time"])
 
-    tree.write(filename, encoding='UTF-8', xml_declaration=True)
+    remoteFile.close()
+    remoteFile = sftpClient.open(filename, mode="w")
+    tree.write(remoteFile, encoding='UTF-8', xml_declaration=True)
     updateXmlFromDBCommand = f"scdispatch -i {eventId}.xml -O update"
 
-    process = subprocess.Popen(updateXmlFromDBCommand, stdout=subprocess.PIPE)
-    process.wait()
+    remoteFile.close()
 
+    stdin, stdout, stderr = sshClient.exec_command(f"scdispatch -i ./test/TEST.xml -O update")
+    app.logger.info(str(stdout.read() + stderr.read(), 'utf-8'))
+
+    sshClient.close()
     return request.json
 
 
@@ -69,5 +65,21 @@ def hello_world():
     return 'Hello, World!'
 
 
+def sshConnection():
+    sshClient = paramiko.SSHClient()
+    sshClient.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    sshClient.connect(hostname=sshHost, username=sshUser, password=sshPassw)
+
+    while True:
+        command = input()
+        if command == "q":
+            break
+        stdin, stdout, stderr = sshClient.exec_command(command)
+        print(str(stdout.read() + stderr.read(), 'utf-8'))
+
+    sshClient.close()
+
+
 if __name__ == "__main__":
     app.run(host=host, port=port, debug=True)
+
