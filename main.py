@@ -20,7 +20,8 @@ app = Flask(__name__)
 def dump_xml_from_db(ssh_client, event_id):
     dump_xml_command = f"scxmldump -fpP -E {event_id} -o {xml_file_path} \
              -d postgresql://sysop:sysop@localhost/seiscomp"
-    ssh_client.exec_command(dump_xml_command)
+    stdin, stdout, stderr = ssh_client.exec_command(dump_xml_command)
+    stdout.channel.recv_exit_status()
 
 
 def update_xml(ssh_client, picks):
@@ -46,7 +47,8 @@ def update_xml(ssh_client, picks):
 
 def write_xml_to_db(ssh_client):
     update_xml_command = f"scdispatch -i {xml_file_path} -O update"
-    ssh_client.exec_command(update_xml_command)
+    stdin, stdout, stderr = ssh_client.exec_command(update_xml_command)
+    stdout.channel.recv_exit_status()
 
 
 def delete_temp_xml(ssh_client):
