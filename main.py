@@ -12,7 +12,7 @@ ssh_host = 'ftp_storage'
 ssh_user = 'root'
 ssh_pass = 'root'
 
-xml_file_path = './app/update_picks_workdir/temp.xml'
+xml_file_path = '/root/app/update_picks_workdir/temp.xml'
 
 app = Flask(__name__)
 
@@ -49,6 +49,11 @@ def write_xml_to_db(ssh_client):
     ssh_client.exec_command(update_xml_command)
 
 
+def delete_temp_xml(ssh_client):
+    delete_xml_command = f"rm {xml_file_path}"
+    ssh_client.exec_command(delete_xml_command)
+
+
 @app.route("/", methods=['POST'])
 @cross_origin()
 def update_pick_times():
@@ -64,6 +69,8 @@ def update_pick_times():
         update_xml(ssh_client, picks)
 
         write_xml_to_db(ssh_client)
+
+        delete_temp_xml(ssh_client)
 
     return request.json
 
