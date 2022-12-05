@@ -1,4 +1,3 @@
-import subprocess
 import xml.etree.ElementTree as ET
 import re
 import paramiko
@@ -9,77 +8,65 @@ from flask_cors import cross_origin
 host = '0.0.0.0'
 port = 3333
 
-sshHost = 'ftp_storage'
-sshUser = 'root'
-sshPassw = 'root'
+ssh_host = 'ftp_storage'
+ssh_user = 'root'
+ssh_pass = 'root'
+
+xml_file_path = './app/update_picks_workdir/temp.xml'
 
 app = Flask(__name__)
 
 
-@app.route("/update-picks", methods=['POST'])
+def dump_xml_from_db(ssh_client, event_id):
+    dump_xml_command = f"scxmldump -fpP -E {event_id} -o {xml_file_path} \
+             -d postgresql://sysop:sysop@localhost/seiscomp"
+    ssh_client.exec_command(dump_xml_command)
+
+
+def update_xml(ssh_client, picks):
+    with ssh_client.open_sftp() as sftp_client:
+        with sftp_client.open(xml_file_path, mode="r") as remote_file:
+            prefix = "http://geofon.gfz-potsdam.de/ns/seiscomp3-schema/0.11"
+            tree = ET.parse(remote_file)
+            ET.register_namespace('', prefix)
+            root = tree.getroot()
+
+            xml_picks = root.find(f"{{{prefix}}}EventParameters").findall(f"{{{prefix}}}pick")
+
+            for pick in picks:
+                pick_id_regexp = r'^' + re.escape(pick["pickIdStart"]) + r'.*' + re.escape(
+                    pick["pickIdEnd"]) + r'\.[A-Z]{3}$'
+                for xml_pick in xml_picks:
+                    if re.match(pick_id_regexp, xml_pick.get("publicID")):
+                        xml_pick.find(f"{{{prefix}}}time").find(f"{{{prefix}}}value").text = str(pick["time"])
+
+        with sftp_client.open(xml_file_path, mode="w") as remote_file:
+            tree.write(remote_file, encoding='UTF-8', xml_declaration=True)
+
+
+def write_xml_to_db(ssh_client):
+    update_xml_command = f"scdispatch -i {xml_file_path} -O update"
+    ssh_client.exec_command(update_xml_command)
+
+
+@app.route("/", methods=['POST'])
 @cross_origin()
 def update_pick_times():
-    eventId = request.json["eventId"]
+    event_id = request.json["eventId"]
     picks = request.json["picks"]
 
-    sshClient = paramiko.SSHClient()
-    sshClient.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    sshClient.connect(hostname=sshHost, username=sshUser, password=sshPassw)
+    with paramiko.SSHClient() as ssh_client:
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh_client.connect(hostname=ssh_host, username=ssh_user, password=ssh_pass)
 
-    stdin, stdout, stderr = sshClient.exec_command(f"scxmldump -fpP -E {eventId} -o ./test/TEST.xml \
-         -d postgresql://sysop:sysop@localhost/seiscomp")
-    app.logger.info(str(stdout.read() + stderr.read(), 'utf-8'))
+        dump_xml_from_db(ssh_client, event_id)
 
-    prefix = "http://geofon.gfz-potsdam.de/ns/seiscomp3-schema/0.11"
-    filename = "./test/TEST.xml"
-    sftpClient = sshClient.open_sftp()
-    remoteFile = sftpClient.open(filename, mode="r")
-    tree = ET.parse(remoteFile)
-    ET.register_namespace('', prefix)
-    root = tree.getroot()
+        update_xml(ssh_client, picks)
 
-    xmlPicks = root.find(f"{{{prefix}}}EventParameters").findall(f"{{{prefix}}}pick")
+        write_xml_to_db(ssh_client)
 
-    for pick in picks:
-        regExp = r'^' + re.escape(pick["pickIdStart"]) + r'.*' + re.escape(pick["pickIdEnd"]) + r'\.[A-Z]{3}$'
-        for xmlPick in xmlPicks:
-            if (re.match(regExp, xmlPick.get("publicID"))):
-                xmlPick.find(f"{{{prefix}}}time").find(f"{{{prefix}}}value").text = str(pick["time"])
-
-    remoteFile.close()
-    remoteFile = sftpClient.open(filename, mode="w")
-    tree.write(remoteFile, encoding='UTF-8', xml_declaration=True)
-    updateXmlFromDBCommand = f"scdispatch -i {eventId}.xml -O update"
-
-    remoteFile.close()
-
-    stdin, stdout, stderr = sshClient.exec_command(f"scdispatch -i ./test/TEST.xml -O update")
-    app.logger.info(str(stdout.read() + stderr.read(), 'utf-8'))
-
-    sshClient.close()
     return request.json
-
-
-@app.route('/hello')
-def hello_world():
-    return 'Hello, World!'
-
-
-def sshConnection():
-    sshClient = paramiko.SSHClient()
-    sshClient.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    sshClient.connect(hostname=sshHost, username=sshUser, password=sshPassw)
-
-    while True:
-        command = input()
-        if command == "q":
-            break
-        stdin, stdout, stderr = sshClient.exec_command(command)
-        print(str(stdout.read() + stderr.read(), 'utf-8'))
-
-    sshClient.close()
 
 
 if __name__ == "__main__":
     app.run(host=host, port=port, debug=True)
-
