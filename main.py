@@ -65,22 +65,22 @@ def update_xml(ssh_client, picks, event_id):
 
             for pick in picks:
                 pick_id_regexp = r'^' + re.escape(pick["pickId"]) + r'\.[A-Z]{3}$'
-                is_xml_pick_exist = False
+                is_xml_pick_doesnt_exist = True
                 for xml_pick in xml_picks:
                     if re.match(pick_id_regexp, xml_pick.get("publicID")):
                         xml_pick.find(f"{{{prefix}}}time").find(f"{{{prefix}}}value").text = str(pick["time"])
-                        is_xml_pick_exist = True
+                        is_xml_pick_doesnt_exist = False
 
-                if is_xml_pick_exist:
-                    pick_hhz, arrival_hhz = create_new_xml_pick(f"{pick.pickId}.HHZ",
+                if is_xml_pick_doesnt_exist:
+                    pick_hhz, arrival_hhz = create_new_xml_pick(pick["pickId"] + ".HHZ",
                                                             pick["phase"],
                                                             pick["time"], pick["network"],
                                                             pick["station"], "HHZ")
-                    pick_hhn, arrival_hhn = create_new_xml_pick(f"{pick.pickId}.HHN",
+                    pick_hhn, arrival_hhn = create_new_xml_pick(pick["pickId"] + ".HHN",
                                                             pick["phase"],
                                                             pick["time"], pick["network"],
                                                             pick["station"], "HHN")
-                    pick_hhe, arrival_hhe = create_new_xml_pick(f"{pick.pickId}.HHE",
+                    pick_hhe, arrival_hhe = create_new_xml_pick(pick["pickId"] + ".HHE",
                                                             pick["phase"],
                                                             pick["time"], pick["network"],
                                                             pick["station"], "HHE")
@@ -89,7 +89,7 @@ def update_xml(ssh_client, picks, event_id):
                     pick_parent_element.insert(0, pick_hhn)
                     pick_parent_element.insert(0, pick_hhe)
 
-                    arrival_parent_element = root.find(f"{{{prefix}}}origin")
+                    arrival_parent_element = pick_parent_element.find(f"{{{prefix}}}origin")
                     arrival_parent_element.insert(0, arrival_hhz)
                     arrival_parent_element.insert(0, arrival_hhn)
                     arrival_parent_element.insert(0, arrival_hhe)
