@@ -107,6 +107,13 @@ def write_xml_to_db(ssh_client):
     stdout.channel.recv_exit_status()
 
 
+def remove_xml_from_db(ssh_client):
+    remove_xml_command = f"scdispatch -i {xml_file_path} -O remove"
+    stdin, stdout, stderr = ssh_client.exec_command(remove_xml_command)
+    stdout.channel.recv_exit_status()
+
+
+
 def delete_temp_xml(ssh_client):
     delete_xml_command = f"rm {xml_file_path}"
     ssh_client.exec_command(delete_xml_command)
@@ -131,6 +138,26 @@ def update_pick_times():
         delete_temp_xml(ssh_client)
 
     return request.json
+
+
+
+@app.route("/delete", methods=['DELETE'])
+@cross_origin()
+def renove_event():
+    event_id = request.json["eventId"]
+
+    with paramiko.SSHClient() as ssh_client:
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh_client.connect(hostname=ssh_host, username=ssh_user, password=ssh_pass)
+
+        dump_xml_from_db(ssh_client, event_id)
+
+        remove_xml_from_db(ssh_client)
+
+        delete_temp_xml(ssh_client)
+
+    return request.json
+
 
 
 if __name__ == "__main__":
